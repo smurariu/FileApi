@@ -11,13 +11,13 @@ namespace FileStorage.Client
             FileInfo fi = new FileInfo(@"D:\Music\Dado.zip");
             using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-
-                for (long i = 117440512; i < fi.Length; i += 1024 * 1024)
+                for (long i = 0; i < fi.Length; i += 1024 * 1024)
                 {
                     PutRange(fs, i, i + 1024 * 1024);
                     Console.Write(i);
                 }
             }
+
             string firstFile = @"D:\Music\Dado.zip";
             string secondFile = @"D:\Work\www\FileStorage\FileStorage\bin\Debug\files\Dado.zip";
 
@@ -44,12 +44,8 @@ namespace FileStorage.Client
 
             int bytesRead = 0;
             fs.Seek(start, SeekOrigin.Begin);
-            while (fs.Position < end && fs.Position < fs.Length)
-            {
-                dataToSend[bytesRead] = (byte)fs.ReadByte();
-                bytesRead++;
-            }
-        
+            bytesRead = fs.Read(dataToSend, 0, (int)(end - start));
+
             HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/Dado.zip?comp=range");
             webRequest.Method = "PUT";
 
