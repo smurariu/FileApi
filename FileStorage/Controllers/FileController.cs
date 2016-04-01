@@ -91,7 +91,6 @@ namespace FileStorage.Controllers
 
                             if (writeLength == contentLength)
                             {
-
                                 if (Request.Headers.GetValues("x-ms-write").First() == "write")
                                 {
                                     var filePath = Path.Combine("files", id);
@@ -110,20 +109,33 @@ namespace FileStorage.Controllers
 
                                         stream.Read(content, 0, (int)writeLength);
 
-                                        using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read))
+                                        if (Request.Content.Headers.Contains("Content-MD5"))
                                         {
-                                            fs.Seek(startPosition, SeekOrigin.Begin);
-                                            foreach (byte arrayByte in content)
+                                            string receivedMd5 = Request.Content.Headers.GetValues("Content-MD5").First();
+
+                                            System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+                                            byte[] md5Hash = md5.ComputeHash(content);
+                                            string computedMd5 = System.Convert.ToBase64String(md5Hash);
+
+                                            if (String.CompareOrdinal(receivedMd5, computedMd5) == 0)
                                             {
-                                                fs.WriteByte(arrayByte);
+                                                WriteBytes(filePath, startPosition, content);
+                                                result.StatusCode = System.Net.HttpStatusCode.Created;
                                             }
+                                        }
+                                        else
+                                        {
+                                            WriteBytes(filePath, startPosition, content);
                                             result.StatusCode = System.Net.HttpStatusCode.Created;
                                         }
                                     }
                                 }
                                 else if (Request.Headers.GetValues("x-ms-write").First() == "clear")
                                 {
+                                    if (Request.Content.Headers.Contains("Content-MD5")==false)
+                                    {
 
+                                    }
                                 }
                             }
                         }
@@ -132,6 +144,18 @@ namespace FileStorage.Controllers
             }
 
             return result;
+        }
+
+        private void WriteBytes(string filePath, long startPosition, byte[] content)
+        {
+            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read))
+            {
+                fs.Seek(startPosition, SeekOrigin.Begin);
+                foreach (byte arrayByte in content)
+                {
+                    fs.WriteByte(arrayByte);
+                }
+            }
         }
     }
 }
