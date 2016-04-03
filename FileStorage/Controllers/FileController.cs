@@ -6,6 +6,7 @@ using System.Web.Http;
 
 namespace FileStorage.Controllers
 {
+
     public class FileController : ApiController
     {
         [HttpGet]
@@ -16,28 +17,18 @@ namespace FileStorage.Controllers
         }
 
         [HttpPut]
-        public HttpResponseMessage CreateFile(string id)
+        [Route("api/File/{*filepath}")]
+        public HttpResponseMessage CreateFile(string filepath)
         {
             HttpResponseMessage result = new HttpResponseMessage();
+            result.StatusCode = System.Net.HttpStatusCode.BadRequest;
 
             long length = 0;
 
-            bool isValidRequest = true;
-            if (Request.Headers.Contains("x-ms-content-length") == false)
-            {
-                isValidRequest = false;
-            }
-            else
+            if (Request.Headers.Contains("x-ms-content-length"))
             {
                 length = long.Parse(Request.Headers.GetValues("x-ms-content-length").First());
-            }
 
-            if (isValidRequest == false)
-            {
-                result.StatusCode = System.Net.HttpStatusCode.BadRequest;
-            }
-            else
-            {
                 try
                 {
                     if (new DirectoryInfo("files").Exists == false)
@@ -45,20 +36,31 @@ namespace FileStorage.Controllers
                         Directory.CreateDirectory("files");
                     }
 
+                    string folderPath = Path.GetDirectoryName(filepath);
+
+                    if (Directory.Exists(Path.Combine("files", folderPath)) == false)
+                    {
+                        result.StatusCode = System.Net.HttpStatusCode.PreconditionFailed;
+                    }
+                    else
+                    {
+                        if (File.Exists(Path.Combine("files", filepath)) == false)
+                        {
+                            using (FileStream fileStream = new FileStream(Path.Combine("files", filepath), FileMode.Create, FileAccess.Write, FileShare.None))
+                            {
+                                if (fileStream != null)
+                                {
+                                    result.StatusCode = System.Net.HttpStatusCode.Created;
+                                    result.Headers.Add("Server", System.Environment.MachineName);
+                                    fileStream.SetLength(length);
+                                }
+                            }
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     result = Request.CreateErrorResponse(System.Net.HttpStatusCode.InternalServerError, ex);
-                }
-
-                using (FileStream fileStream = new FileStream(Path.Combine("files", id), FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    if (fileStream != null)
-                    {
-                        result.StatusCode = System.Net.HttpStatusCode.Created;
-                        result.Headers.Add("Server", System.Environment.MachineName);
-                        fileStream.SetLength(length);
-                    }
                 }
             }
 
@@ -66,8 +68,8 @@ namespace FileStorage.Controllers
         }
 
         [HttpPut]
-
-        public HttpResponseMessage PutRange(string id, string comp)
+        [Route("api/File/{*filepath}")]
+        public HttpResponseMessage PutRange(string filepath, string comp)
         {
             HttpResponseMessage result = new HttpResponseMessage();
             result.StatusCode = System.Net.HttpStatusCode.BadRequest;
@@ -89,53 +91,52 @@ namespace FileStorage.Controllers
                             long writeLength = endPosition - startPosition;
                             long contentLength = long.Parse(specifiedLength);
 
-                            if (writeLength == contentLength)
+                            var filePath = Path.Combine("files", filepath);
+                            if (File.Exists(filePath) == false)
                             {
-                                if (Request.Headers.GetValues("x-ms-write").First() == "write")
+                                result.StatusCode = System.Net.HttpStatusCode.NotFound;
+                            }
+                            else if (writeLength > 4 * 1024 * 1024) //4Mb
+                            {
+                                result.StatusCode = System.Net.HttpStatusCode.RequestEntityTooLarge;
+                            }
+                            else if (Request.Headers.GetValues("x-ms-write").First() == "write")
+                            {
+                                if (writeLength == contentLength)
                                 {
-                                    var filePath = Path.Combine("files", id);
-                                    if (File.Exists(filePath) == false)
+                                    var stream = Request.Content.ReadAsStreamAsync().Result;
+                                    byte[] content = new byte[writeLength];
+
+                                    stream.Read(content, 0, (int)writeLength);
+
+                                    if (Request.Content.Headers.Contains("Content-MD5"))
                                     {
-                                        result.StatusCode = System.Net.HttpStatusCode.NotFound;
-                                    }
-                                    else if (writeLength > 4 * 1024 * 1024) //4Mb
-                                    {
-                                        result.StatusCode = System.Net.HttpStatusCode.RequestEntityTooLarge;
-                                    }
-                                    else
-                                    {
-                                        var stream = Request.Content.ReadAsStreamAsync().Result;
-                                        byte[] content = new byte[writeLength];
+                                        string receivedMd5 = Request.Content.Headers.GetValues("Content-MD5").First();
 
-                                        stream.Read(content, 0, (int)writeLength);
+                                        System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+                                        byte[] md5Hash = md5.ComputeHash(content);
+                                        string computedMd5 = System.Convert.ToBase64String(md5Hash);
 
-                                        if (Request.Content.Headers.Contains("Content-MD5"))
-                                        {
-                                            string receivedMd5 = Request.Content.Headers.GetValues("Content-MD5").First();
-
-                                            System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
-                                            byte[] md5Hash = md5.ComputeHash(content);
-                                            string computedMd5 = System.Convert.ToBase64String(md5Hash);
-
-                                            if (String.CompareOrdinal(receivedMd5, computedMd5) == 0)
-                                            {
-                                                WriteBytes(filePath, startPosition, content);
-                                                result.StatusCode = System.Net.HttpStatusCode.Created;
-                                            }
-                                        }
-                                        else
+                                        if (String.CompareOrdinal(receivedMd5, computedMd5) == 0)
                                         {
                                             WriteBytes(filePath, startPosition, content);
                                             result.StatusCode = System.Net.HttpStatusCode.Created;
                                         }
                                     }
-                                }
-                                else if (Request.Headers.GetValues("x-ms-write").First() == "clear")
-                                {
-                                    if (Request.Content.Headers.Contains("Content-MD5")==false)
+                                    else
                                     {
-
+                                        WriteBytes(filePath, startPosition, content);
+                                        result.StatusCode = System.Net.HttpStatusCode.Created;
                                     }
+                                }
+                            }
+                            else if (Request.Headers.GetValues("x-ms-write").First() == "clear")
+                            {
+                                if (Request.Content.Headers.Contains("Content-MD5") == false)
+                                {
+                                    //fill range with 0s
+                                    byte[] dataToWrite = new byte[writeLength];
+                                    WriteBytes(filePath, startPosition, dataToWrite);
                                 }
                             }
                         }

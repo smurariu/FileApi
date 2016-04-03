@@ -10,9 +10,6 @@ namespace FileStorage
         {
             var config = new HttpSelfHostConfiguration("http://localhost:8081");
 
-            config.Routes.MapHttpRoute(
-                "API Default", "api/{controller}/{id}",
-                new { id = RouteParameter.Optional });
             config.MapHttpAttributeRoutes();
 
             config.MaxReceivedMessageSize = 4 * 1024 * 1024;

@@ -9,46 +9,59 @@ namespace FileStorage.Client
     {
         static void Main(string[] args)
         {
+            string filename = @"D:\Temp\altele\55A3AA64.mp4";
+
+            if (args.Length == 1)
+            {
+                filename = args[0];
+            }
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            FileInfo fi = new FileInfo(@"D:\Temp\altele\55A3AA64.mp4");
+            FileInfo fi = new FileInfo(filename);
             using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
+                //create the file on the server
+                CreateFile(fi.Name, fi.Length);
+
+                //transfer the file contents
                 for (long i = 0; i < fi.Length; i += 1024 * 1024)
                 {
-                    PutRange(fs, i, i + 1024 * 1024);
+                    PutRange(fs, fi.Name, i, i + 1024 * 1024);
                     Console.Write(i);
                 }
             }
 
             sw.Stop();
 
-            Console.WriteLine("Transferred " + fi.Length + " bytes in " + sw.ElapsedMilliseconds);
+            Console.WriteLine(Environment.NewLine + "Transferred " + fi.Length + " bytes in " + sw.ElapsedMilliseconds);
+            Console.ReadLine();
+        }
 
-            string firstFile = @"D:\Temp\altele\55A3AA64.mp4";
-            string secondFile = @"D:\Work\www\FileStorage\FileStorage\bin\Debug\files\Dado.zip";
+        private static void CreateFile(string name, long length)
+        {
+            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + name);
+            webRequest.Method = "PUT";
+            (webRequest as WebRequest).Headers.Add("x-ms-content-length", length.ToString());
+            (webRequest as WebRequest).ContentLength = 0;
 
-            System.Security.Cryptography.HashAlgorithm ha = System.Security.Cryptography.HashAlgorithm.Create();
-
-            FileStream f1 = new FileStream(firstFile, FileMode.Open);
-            FileStream f2 = new FileStream(secondFile, FileMode.Open);
-            /* Calculate Hash */
-            byte[] hash1 = ha.ComputeHash(f1);
-            byte[] hash2 = ha.ComputeHash(f2);
-            f1.Close();
-            f2.Close();
-            /* Show Hash in TextBoxes */
-            Console.WriteLine("Hash 1: " + BitConverter.ToString(hash1));
-            Console.WriteLine("Hash 2: " + BitConverter.ToString(hash2));
+            using (HttpWebResponse wr = (HttpWebResponse)webRequest.GetResponse())
+            {
+                using (Stream response = wr.GetResponseStream())
+                {
+                    // handle response stream.
+                    string responseText = new StreamReader(response).ReadToEnd();
+                    Console.WriteLine(responseText);
+                }
+            }
 
 
         }
 
-        public static void PutRange(FileStream fs, long start, long end)
+        public static void PutRange(FileStream fs, string filePath, long start, long end)
         {
             //read range calculation
-            if(fs.Length<end)
+            if (fs.Length < end)
             {
                 end = fs.Length;
             }
@@ -60,7 +73,7 @@ namespace FileStorage.Client
             fs.Seek(start, SeekOrigin.Begin);
             bytesRead = fs.Read(dataToSend, 0, range);
 
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/Dado.zip?comp=range");
+            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + filePath + "?comp=range");
             webRequest.Method = "PUT";
 
             System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
