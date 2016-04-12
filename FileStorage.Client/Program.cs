@@ -9,7 +9,10 @@ namespace FileStorage.Client
     {
         static void Main(string[] args)
         {
-            string filename = @"D:\Temp\altele\55A3AA64.mp4";
+            int kb = 1024;
+            int chunkSize = 1024 * kb;
+
+            string filename = @"testPayload.txt";
 
             if (args.Length == 1)
             {
@@ -25,9 +28,9 @@ namespace FileStorage.Client
                 CreateFile(fi.Name, fi.Length);
 
                 //transfer the file contents
-                for (long i = 0; i < fi.Length; i += 1024 * 1024)
+                for (long i = 0; i < fi.Length; i += chunkSize)
                 {
-                    PutRange(fs, fi.Name, i, i + 1024 * 1024);
+                    PutRange(fs, fi.Name, i, i + chunkSize);
                     Console.Write(i);
                 }
             }
@@ -79,7 +82,7 @@ namespace FileStorage.Client
             System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
             byte[] md5Hash = md5.ComputeHash(dataToSend);
 
-            (webRequest as WebRequest).Headers.Add("Content-MD5", System.Convert.ToBase64String(md5Hash));
+            (webRequest as WebRequest).Headers.Add("Content-MD5", Convert.ToBase64String(md5Hash));
             (webRequest as WebRequest).Headers.Add("x-ms-write", "write");
             (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=" + start + "-" + (start + bytesRead).ToString());
             (webRequest as WebRequest).Headers.Add("x-ms-content-length", bytesRead.ToString());

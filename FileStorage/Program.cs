@@ -1,6 +1,5 @@
-﻿using System;
-using System.Web.Http;
-using System.Web.Http.SelfHost;
+﻿using Microsoft.Owin.Hosting;
+using System;
 
 namespace FileStorage
 {
@@ -8,19 +7,14 @@ namespace FileStorage
     {
         static void Main(string[] args)
         {
-            var config = new HttpSelfHostConfiguration("http://localhost:8081");
-
-            config.MapHttpAttributeRoutes();
-
-            config.MaxReceivedMessageSize = 4 * 1024 * 1024;
-
-            using (HttpSelfHostServer server = new HttpSelfHostServer(config))
+            string baseAddress = "http://localhost:8081/";
+            
+            // Start OWIN host 
+            using (WebApp.Start<Startup>(url: baseAddress))
             {
-                server.OpenAsync().Wait();
                 Console.WriteLine("Press Enter to quit.");
                 Console.ReadLine();
             }
-
         }
     }
 }

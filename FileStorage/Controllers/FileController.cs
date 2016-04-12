@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading.Tasks;
 using System.Web.Http;
 
 namespace FileStorage.Controllers
@@ -69,7 +70,7 @@ namespace FileStorage.Controllers
 
         [HttpPut]
         [Route("api/File/{*filepath}")]
-        public HttpResponseMessage PutRange(string filepath, string comp)
+        public async Task<HttpResponseMessage> PutRange(string filepath, string comp)
         {
             HttpResponseMessage result = new HttpResponseMessage();
             result.StatusCode = System.Net.HttpStatusCode.BadRequest;
@@ -104,29 +105,33 @@ namespace FileStorage.Controllers
                             {
                                 if (writeLength == contentLength)
                                 {
-                                    var stream = Request.Content.ReadAsStreamAsync().Result;
                                     byte[] content = new byte[writeLength];
-
-                                    stream.Read(content, 0, (int)writeLength);
-
-                                    if (Request.Content.Headers.Contains("Content-MD5"))
+                                    using (MemoryStream ms = new MemoryStream(content))
                                     {
-                                        string receivedMd5 = Request.Content.Headers.GetValues("Content-MD5").First();
-
-                                        System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
-                                        byte[] md5Hash = md5.ComputeHash(content);
-                                        string computedMd5 = System.Convert.ToBase64String(md5Hash);
-
-                                        if (String.CompareOrdinal(receivedMd5, computedMd5) == 0)
+                                        using (Stream stream = await Request.Content.ReadAsStreamAsync())
                                         {
-                                            WriteBytes(filePath, startPosition, content);
+                                            await stream.CopyToAsync(ms);
+                                        }
+
+                                        if (Request.Content.Headers.Contains("Content-MD5"))
+                                        {
+                                            string receivedMd5 = Request.Content.Headers.GetValues("Content-MD5").First();
+
+                                            System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+                                            byte[] md5Hash = md5.ComputeHash(content);
+                                            string computedMd5 = Convert.ToBase64String(md5Hash);
+
+                                            if (String.CompareOrdinal(receivedMd5, computedMd5) == 0)
+                                            {
+                                                await WriteBytes(filePath, startPosition, ms);
+                                                result.StatusCode = System.Net.HttpStatusCode.Created;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            await WriteBytes(filePath, startPosition, ms);
                                             result.StatusCode = System.Net.HttpStatusCode.Created;
                                         }
-                                    }
-                                    else
-                                    {
-                                        WriteBytes(filePath, startPosition, content);
-                                        result.StatusCode = System.Net.HttpStatusCode.Created;
                                     }
                                 }
                             }
@@ -136,7 +141,10 @@ namespace FileStorage.Controllers
                                 {
                                     //fill range with 0s
                                     byte[] dataToWrite = new byte[writeLength];
-                                    WriteBytes(filePath, startPosition, dataToWrite);
+                                    using (MemoryStream ms = new MemoryStream(dataToWrite))
+                                    {
+                                        await WriteBytes(filePath, startPosition, ms);
+                                    }
                                 }
                             }
                         }
@@ -147,15 +155,13 @@ namespace FileStorage.Controllers
             return result;
         }
 
-        private void WriteBytes(string filePath, long startPosition, byte[] content)
+        private async Task WriteBytes(string filePath, long startPosition, Stream content)
         {
             using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read))
             {
+                content.Seek(0, SeekOrigin.Begin);
                 fs.Seek(startPosition, SeekOrigin.Begin);
-                foreach (byte arrayByte in content)
-                {
-                    fs.WriteByte(arrayByte);
-                }
+                await content.CopyToAsync(fs);
             }
         }
     }
