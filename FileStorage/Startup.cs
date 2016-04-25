@@ -1,5 +1,6 @@
 ﻿using Owin;
 using System;
+using System.Configuration;
 using System.Net.Http;
 using System.Web.Http;
 using System.Web.Http.Tracing;
@@ -8,11 +9,38 @@ namespace FileStorage
 {
     public class Startup
     {
+        public bool IsIdentityEnabled
+        {
+            get
+            {
+                bool result = false;
+                string setting = ConfigurationManager.AppSettings["IdentityServerOptions.Enabled"];
+
+                Boolean.TryParse(setting, out result);
+
+                return result;
+            }
+        }
+
         public void Configuration(IAppBuilder app)
         {
-            // Configure Web API for self-host. 
             HttpConfiguration config = new HttpConfiguration();
+
+            if (IsIdentityEnabled)
+            {
+                app.UseIdentityServerBearerTokenAuthentication(new IdentityServer3.AccessTokenValidation.IdentityServerBearerTokenAuthenticationOptions()
+                {
+                    Authority = ConfigurationManager.AppSettings["IdentityServerOptions.Authority"],
+                    RequiredScopes = new[] { "sampleApi" }
+                });
+
+                config.Filters.Add(new AuthorizeAttribute());
+            }
+            
+            
             config.Services.Replace(typeof(ITraceWriter), new TraceWriter());
+            
+            // Configure Web API for self-host. 
             config.MapHttpAttributeRoutes();
             app.UseWebApi(config);
         }

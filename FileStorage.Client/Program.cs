@@ -45,6 +45,8 @@ namespace FileStorage.Client
         {
             HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + name);
             webRequest.Method = "PUT";
+
+            (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization, "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
             (webRequest as WebRequest).Headers.Add("x-ms-content-length", length.ToString());
             (webRequest as WebRequest).ContentLength = 0;
 
@@ -82,6 +84,7 @@ namespace FileStorage.Client
             System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
             byte[] md5Hash = md5.ComputeHash(dataToSend);
 
+            (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization, "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
             (webRequest as WebRequest).Headers.Add("Content-MD5", Convert.ToBase64String(md5Hash));
             (webRequest as WebRequest).Headers.Add("x-ms-write", "write");
             (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=" + start + "-" + (start + bytesRead).ToString());
