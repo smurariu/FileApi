@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Web.Http;
 
@@ -162,6 +163,54 @@ namespace FileStorage.Controllers
                 fs.Seek(startPosition, SeekOrigin.Begin);
                 await content.CopyToAsync(fs);
             }
+        }
+
+        [HttpGet]
+        [Route("api/File/{*filepath}")]
+        public HttpResponseMessage GetFile(string filepath)
+        {
+            HttpResponseMessage result = new HttpResponseMessage();
+            result.StatusCode = System.Net.HttpStatusCode.InternalServerError;
+
+            long length = 0;
+            try
+            {
+                if (new DirectoryInfo("files").Exists == false)
+                {
+                    return result;
+                }
+
+                string folderPath = Path.GetDirectoryName(filepath);
+
+                if (Directory.Exists(Path.Combine("files", folderPath)) == false)
+                {
+                    result.StatusCode = System.Net.HttpStatusCode.NotFound;
+                }
+                else
+                {
+                    if (File.Exists(Path.Combine("files", filepath)) == false)
+                    {
+                        result.StatusCode = System.Net.HttpStatusCode.NotFound;
+                    }
+                    else
+                    {
+                        var stream = new FileStream(Path.Combine("files", filepath), FileMode.Open,
+                                FileAccess.Read, FileShare.None);
+                        result.Content = new StreamContent(stream);
+
+                        result.Headers.Add("Server", System.Environment.MachineName);
+                        result.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+                        result.StatusCode = System.Net.HttpStatusCode.OK;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                result = Request.CreateErrorResponse(System.Net.HttpStatusCode.InternalServerError, ex);
+            }
+
+            return result;
         }
     }
 }

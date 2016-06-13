@@ -38,8 +38,39 @@ namespace FileStorage.Client
             sw.Stop();
 
             Console.WriteLine(Environment.NewLine + "Transferred " + fi.Length + " bytes in " + sw.ElapsedMilliseconds);
+
+
+            string filenameRead = @"testPayloadRead.txt";
+            GetFile(filename, filenameRead);
+
             Console.ReadLine();
         }
+
+
+        private static void GetFile(string getFile, string saveFile)
+        {
+            HttpWebRequest webRequest = (HttpWebRequest) HttpWebRequest.Create("http://localhost:8081/Api/File/" + getFile);
+            webRequest.Method = "GET";
+
+            (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization,
+                "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
+            (webRequest as WebRequest).ContentLength = 0;
+
+            using (HttpWebResponse wr = (HttpWebResponse) webRequest.GetResponse())
+            {
+                using (Stream response = wr.GetResponseStream())
+                {
+                    // handle response stream.
+                    using (Stream s = File.Create(saveFile))
+                    {
+                        response.CopyTo(s);
+                    }
+                }
+                Console.WriteLine("Read: " + wr.StatusCode);
+            }
+        }
+
+
 
         private static void CreateFile(string name, long length)
         {
