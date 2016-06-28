@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -194,12 +195,56 @@ namespace FileStorage.Controllers
                     }
                     else
                     {
-                        var stream = new FileStream(Path.Combine("files", filepath), FileMode.Open,
-                                FileAccess.Read, FileShare.None);
-                        result.Content = new StreamContent(stream);
+                        var stream = new FileStream(Path.Combine("files", filepath), FileMode.Open, FileAccess.Read, FileShare.None);
+
+                        IEnumerable<string> headXMSRangeList;
+                        IEnumerable<string> headRangeList;
+                        Request.Headers.TryGetValues("x-ms-range", out headXMSRangeList);
+                        Request.Headers.TryGetValues("Range", out headRangeList);
+
+                        string headRange = null;
+                        if (headXMSRangeList != null && headXMSRangeList.Any())
+                        {
+                            headRange = headXMSRangeList.FirstOrDefault();
+                        }
+                        else if (headRangeList != null)
+                        {
+                            headRange = headRangeList.FirstOrDefault();
+                        }
+
+                        int startByte = -1;
+                        int endByte = -1;
+                        if (headRange != null)
+                        {
+                            string rangeHeader = headRange.Replace("bytes=", "");
+                            string[] range = rangeHeader.Split('-');
+                            startByte = int.Parse(range[0]);
+                            if (range[1].Trim().Length > 0) int.TryParse(range[1], out endByte);
+                            if (endByte == -1) endByte = (int) stream.Length;
+                        }
+                        else
+                        {
+                            startByte = 0;
+                            endByte = (int)stream.Length;
+                        }
+
+                        byte[] buffer = new byte[endByte - startByte];
+                        stream.Position = startByte;
+                        stream.Read(buffer, 0, endByte - startByte);
+                        stream.Flush();
+                        stream.Close();
+
+                        result.Content = new ByteArrayContent(buffer);
 
                         result.Headers.Add("Server", System.Environment.MachineName);
+                        result.Headers.Add("Accept-Ranges", "bytes");
                         result.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                        result.Content.Headers.ContentLength = buffer.Length;
+                        if (headRange != null)
+                        {
+                            result.Content.Headers.ContentRange = new ContentRangeHeaderValue(startByte, endByte);
+                        }
+                        result.Content.Headers.LastModified = File.GetLastWriteTime(Path.Combine("files", filepath));
 
                         result.StatusCode = System.Net.HttpStatusCode.OK;
                     }

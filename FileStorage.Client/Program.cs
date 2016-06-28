@@ -52,9 +52,8 @@ namespace FileStorage.Client
             HttpWebRequest webRequest = (HttpWebRequest) HttpWebRequest.Create("http://localhost:8081/Api/File/" + getFile);
             webRequest.Method = "GET";
 
-            (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization,
-                "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
             (webRequest as WebRequest).ContentLength = 0;
+            (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=2-250002");
 
             using (HttpWebResponse wr = (HttpWebResponse) webRequest.GetResponse())
             {
@@ -66,7 +65,12 @@ namespace FileStorage.Client
                         response.CopyTo(s);
                     }
                 }
-                Console.WriteLine("Read: " + wr.StatusCode);
+                Console.WriteLine("Read Status Code: " + wr.StatusCode);
+                Console.WriteLine("Read Header: ");
+                foreach (var headKey in wr.Headers.AllKeys)
+                {
+                    Console.Write(" " + headKey + " = " + wr.Headers.Get(headKey) + "; ");
+                }
             }
         }
 
