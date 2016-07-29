@@ -36,10 +36,10 @@ namespace FileStorage
 
                 config.Filters.Add(new AuthorizeAttribute());
             }
-            
-            
+
+
             config.Services.Replace(typeof(ITraceWriter), new TraceWriter());
-            
+
             // Configure Web API for self-host. 
             config.MapHttpAttributeRoutes();
             app.UseWebApi(config);
