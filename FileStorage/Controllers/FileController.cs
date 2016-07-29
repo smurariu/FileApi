@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
+using System.Web;
 using System.Web.Http;
 
 namespace FileStorage.Controllers
@@ -74,7 +76,7 @@ namespace FileStorage.Controllers
         public async Task<HttpResponseMessage> PutRange(string filepath, string comp)
         {
             HttpResponseMessage result = new HttpResponseMessage();
-            result.StatusCode = System.Net.HttpStatusCode.BadRequest;
+            result.StatusCode = HttpStatusCode.BadRequest;
 
             if (comp == "range")
             {
@@ -96,11 +98,11 @@ namespace FileStorage.Controllers
                             var filePath = Path.Combine("files", filepath);
                             if (File.Exists(filePath) == false)
                             {
-                                result.StatusCode = System.Net.HttpStatusCode.NotFound;
+                                result.StatusCode = HttpStatusCode.NotFound;
                             }
                             else if (writeLength > 4 * 1024 * 1024) //4Mb
                             {
-                                result.StatusCode = System.Net.HttpStatusCode.RequestEntityTooLarge;
+                                result.StatusCode = HttpStatusCode.RequestEntityTooLarge;
                             }
                             else if (Request.Headers.GetValues("x-ms-write").First() == "write")
                             {
@@ -125,13 +127,13 @@ namespace FileStorage.Controllers
                                             if (String.CompareOrdinal(receivedMd5, computedMd5) == 0)
                                             {
                                                 await WriteBytes(filePath, startPosition, ms);
-                                                result.StatusCode = System.Net.HttpStatusCode.Created;
+                                                result.StatusCode = HttpStatusCode.Created;
                                             }
                                         }
                                         else
                                         {
                                             await WriteBytes(filePath, startPosition, ms);
-                                            result.StatusCode = System.Net.HttpStatusCode.Created;
+                                            result.StatusCode = HttpStatusCode.Created;
                                         }
                                     }
                                 }
@@ -171,7 +173,7 @@ namespace FileStorage.Controllers
         public HttpResponseMessage GetFile(string filepath)
         {
             HttpResponseMessage result = new HttpResponseMessage();
-            result.StatusCode = System.Net.HttpStatusCode.InternalServerError;
+            result.StatusCode = HttpStatusCode.InternalServerError;
 
             try
             {
@@ -184,13 +186,13 @@ namespace FileStorage.Controllers
 
                 if (Directory.Exists(Path.Combine("files", folderPath)) == false)
                 {
-                    result.StatusCode = System.Net.HttpStatusCode.NotFound;
+                    result.StatusCode = HttpStatusCode.NotFound;
                 }
                 else
                 {
                     if (File.Exists(Path.Combine("files", filepath)) == false)
                     {
-                        result.StatusCode = System.Net.HttpStatusCode.NotFound;
+                        result.StatusCode = HttpStatusCode.NotFound;
                     }
                     else
                     {
@@ -209,53 +211,94 @@ namespace FileStorage.Controllers
                             headRange = headRangeList.FirstOrDefault();
                         }
 
-                        int startByte = 0;
-                        int endByte = -1;
-                        byte[] buffer = null;
+                        long startPosition = 0;
+                        long endPosition = -1;
 
                         if (headRange != null)
                         {
                             string rangeHeader = headRange.Replace("bytes=", "");
                             string[] range = rangeHeader.Split('-');
-                            startByte = int.Parse(range[0]);
-                            if (range[1].Trim().Length > 0) int.TryParse(range[1], out endByte);
-                        }
-
-                        using (var stream = new FileStream(Path.Combine("files", filepath), FileMode.Open, FileAccess.Read, FileShare.None))
-                        {
-                            if (endByte == -1 || endByte > (int)stream.Length)
+                            long.TryParse(range[0], out startPosition);
+                            if (range[1].Trim().Length > 0)
                             {
-                                endByte = (int)stream.Length;
+                                long.TryParse(range[1], out endPosition);
                             }
-
-                            buffer = new byte[endByte - startByte];
-                            stream.Position = startByte;
-                            stream.Read(buffer, 0, endByte - startByte);
-                            stream.Flush();
                         }
 
                         //build the response
-                        result.Content = new ByteArrayContent(buffer);
-                        result.Headers.Add("Server", System.Environment.MachineName);
+                        //http://www.strathweb.com/2013/01/asynchronously-streaming-video-with-asp-net-web-api/
+
+                        FileStreaming fileStreaming = new FileStreaming(Path.Combine("files", filepath), startPosition, endPosition);
+                        result.Content = new PushStreamContent((a, b, c) => { fileStreaming.WriteToStream(a, b, c); }, new MediaTypeHeaderValue("application/octet-stream"));
+                        result.Headers.Add("Server", Environment.MachineName);
                         result.Headers.Add("Accept-Ranges", "bytes");
-                        result.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                        result.Content.Headers.ContentLength = buffer.Length;
-                        if (headRange != null)
-                        {
-                            result.Content.Headers.ContentRange = new ContentRangeHeaderValue(startByte, endByte);
-                        }
                         result.Content.Headers.LastModified = File.GetLastWriteTime(Path.Combine("files", filepath));
 
-                        result.StatusCode = System.Net.HttpStatusCode.OK;
+                        if (headRange != null)
+                        {
+                            result.Content.Headers.ContentRange = new ContentRangeHeaderValue(startPosition, endPosition);
+                        }
+
+                        result.StatusCode = HttpStatusCode.OK;
                     }
                 }
             }
             catch (Exception ex)
             {
-                result = Request.CreateErrorResponse(System.Net.HttpStatusCode.InternalServerError, ex);
+                result = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, ex);
             }
 
             return result;
+        }
+    }
+
+    public class FileStreaming
+    {
+        private readonly string _filepath;
+        private long _startPosition;
+        private long _endPosition;
+
+        public FileStreaming(string filepath, long startPosition, long endPosition)
+        {
+            _filepath = filepath;
+            _startPosition = startPosition;
+            _endPosition = endPosition;
+        }
+
+        public async void WriteToStream(Stream outputStream, HttpContent content, TransportContext context)
+        {
+            try
+            {
+                var buffer = new byte[65536];
+
+                using (var file = File.Open(_filepath, FileMode.Open, FileAccess.Read))
+                {
+                    file.Position = _startPosition;
+                    if (_endPosition == -1 || _endPosition > file.Length)
+                    {
+                        _endPosition = file.Length;
+                    }
+
+                    var bytesRead = 1;
+                    var readLength = _endPosition - _startPosition;
+
+                    while (readLength > 0 && bytesRead > 0)
+                    {
+                        bytesRead = file.Read(buffer, 0, Math.Min((int)/*don't like this at all*/readLength, buffer.Length));
+                        await outputStream.WriteAsync(buffer, 0, bytesRead);
+                        readLength -= bytesRead;
+                    }
+                }
+            }
+            catch (HttpException ex)
+            {
+                Console.WriteLine(ex);
+                return;
+            }
+            finally
+            {
+                outputStream.Close();
+            }
         }
     }
 }
