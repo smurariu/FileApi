@@ -173,7 +173,6 @@ namespace FileStorage.Controllers
             HttpResponseMessage result = new HttpResponseMessage();
             result.StatusCode = System.Net.HttpStatusCode.InternalServerError;
 
-            long length = 0;
             try
             {
                 if (new DirectoryInfo("files").Exists == false)
@@ -195,8 +194,6 @@ namespace FileStorage.Controllers
                     }
                     else
                     {
-                        var stream = new FileStream(Path.Combine("files", filepath), FileMode.Open, FileAccess.Read, FileShare.None);
-
                         IEnumerable<string> headXMSRangeList;
                         IEnumerable<string> headRangeList;
                         Request.Headers.TryGetValues("x-ms-range", out headXMSRangeList);
@@ -212,30 +209,33 @@ namespace FileStorage.Controllers
                             headRange = headRangeList.FirstOrDefault();
                         }
 
-                        int startByte = -1;
+                        int startByte = 0;
                         int endByte = -1;
+                        byte[] buffer = null;
+
                         if (headRange != null)
                         {
                             string rangeHeader = headRange.Replace("bytes=", "");
                             string[] range = rangeHeader.Split('-');
                             startByte = int.Parse(range[0]);
                             if (range[1].Trim().Length > 0) int.TryParse(range[1], out endByte);
-                            if (endByte == -1) endByte = (int) stream.Length;
                         }
-                        else
+
+                        using (var stream = new FileStream(Path.Combine("files", filepath), FileMode.Open, FileAccess.Read, FileShare.None))
                         {
-                            startByte = 0;
-                            endByte = (int)stream.Length;
+                            if (endByte == -1 || endByte > (int)stream.Length)
+                            {
+                                endByte = (int)stream.Length;
+                            }
+
+                            buffer = new byte[endByte - startByte];
+                            stream.Position = startByte;
+                            stream.Read(buffer, 0, endByte - startByte);
+                            stream.Flush();
                         }
 
-                        byte[] buffer = new byte[endByte - startByte];
-                        stream.Position = startByte;
-                        stream.Read(buffer, 0, endByte - startByte);
-                        stream.Flush();
-                        stream.Close();
-
+                        //build the response
                         result.Content = new ByteArrayContent(buffer);
-
                         result.Headers.Add("Server", System.Environment.MachineName);
                         result.Headers.Add("Accept-Ranges", "bytes");
                         result.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");

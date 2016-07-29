@@ -49,13 +49,13 @@ namespace FileStorage.Client
 
         private static void GetFile(string getFile, string saveFile)
         {
-            HttpWebRequest webRequest = (HttpWebRequest) HttpWebRequest.Create("http://localhost:8081/Api/File/" + getFile);
+            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + getFile);
             webRequest.Method = "GET";
 
             (webRequest as WebRequest).ContentLength = 0;
-            (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=2-250002");
+            (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=0-256000");
 
-            using (HttpWebResponse wr = (HttpWebResponse) webRequest.GetResponse())
+            using (HttpWebResponse wr = (HttpWebResponse)webRequest.GetResponse())
             {
                 using (Stream response = wr.GetResponseStream())
                 {
@@ -94,8 +94,6 @@ namespace FileStorage.Client
                     Console.WriteLine(responseText);
                 }
             }
-
-
         }
 
         public static void PutRange(FileStream fs, string filePath, long start, long end)
