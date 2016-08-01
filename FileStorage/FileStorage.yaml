@@ -1,0 +1,108 @@
+# Example YAML to get you started quickly.
+# Be aware that YAML has indentation based scoping.
+# Code completion support is available so start typing for available options.
+swagger: '2.0'
+
+# This is your document metadata
+info:
+  version: "0.1.0"
+  title: FileAPI
+
+# Describe your paths here
+paths:
+  # This is a path endpoint. Change it.
+  /{filepath}:
+    # This is a HTTP operation
+    get:
+      
+      summary: Get file
+      # Describe this verb here. Note: you can use markdown
+      description: Downloads a file or a range of bytes in a file based on the path
+      operationId: GetFile
+      produces:
+        - application/octet-stream
+      # This is array of GET operation parameters:
+      parameters:
+        # An example parameter that is in path and is required
+        - in: path
+          name: filepath
+          description: The complete path to the file
+          required: true
+          type: string
+        
+        - in: header
+          name: x-ms-range
+          description: Range of bytes to download. ex&#58; bytes=0-64
+          required: false
+          type: string
+        - in: header
+          description: Range of bytes to download. ex&#58; bytes=0-64
+          name: range
+          required: false
+          type: string          
+          
+      # Expected responses for this operation:
+      responses:
+        # Response code
+        200:
+          description: Successful response
+        404:
+          description: File or folder was not found
+        500:
+          description: Server error
+    put:
+      summary: Create file
+      description: Creates a new file on the server, duplicates are not allowed and folder must exist.
+      operationId: CreateFile
+      parameters:
+        - in: path
+          name: filepath
+          type: string
+          description: The complete path to the file
+          required: true
+        - in: header
+          name: x-ms-content-length
+          type: integer
+          required: true
+          
+      responses:
+        201:
+          description: File was successfully created
+        400:
+          description: Bad request (when length is not specified for example)
+        412:
+          description: Folder does not exist (preconditoin failed)
+    post:
+      summary: Posts a range of bytes
+      description: Writes a range of bytes in a file
+      parameters:
+        - in: path
+          name: filepath
+          type: string
+          description: The complete path to the file
+          required: true
+        - in: header
+          name: x-ms-range
+          type: string
+          description: Range of bytes to upload. ex&#58; bytes=0-64
+          required: true
+        - in: header
+          name: Content-Length
+          required: true
+          type: integer
+          description: Specifies the number of bytes being transmitted in the request body. When the x-ms-write header is set to clear, the value of this header must be set to zero.
+        - in: header
+          name: Content-MD5
+          required: false
+          type: string
+          description: An MD5 hash of the content. This hash is used to verify the integrity of the data during transport. When the Content-MD5 header is specified, the File service compares the hash of the content that has arrived with the header value that was sent. If the two hashes do not match, the operation will fail with error code 400 (Bad Request). 
+        - in: header
+          name: x-ms-write
+          required: true
+          type: string
+          description: Update&#58; Writes the bytes specified by the request body into the specified range. The Range and Content-Length headers must match to perform the update. Clear&#58; Clears the specified range and releases the space used in storage for that range. To clear a range, set the Content-Length header to zero, and set the Range header to a value that indicates the range to clear, up to maximum file size.        
+      responses:
+        200:
+          description: Succesfuly written bytes to file
+      
+    
