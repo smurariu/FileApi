@@ -13,19 +13,12 @@ namespace FileStorage.Controllers
 {
     public class FileController : ApiController
     {
-        [HttpGet]
-
-        public object Get(string id)
-        {
-            return new string[] { id, "string1", "string2" };
-        }
-
         [HttpPut]
         [Route("api/File/{*filepath}")]
         public HttpResponseMessage CreateFile(string filepath)
         {
             HttpResponseMessage result = new HttpResponseMessage();
-            result.StatusCode = System.Net.HttpStatusCode.BadRequest;
+            result.StatusCode = HttpStatusCode.BadRequest;
 
             long length = 0;
 
@@ -44,7 +37,7 @@ namespace FileStorage.Controllers
 
                     if (Directory.Exists(Path.Combine("files", folderPath)) == false)
                     {
-                        result.StatusCode = System.Net.HttpStatusCode.PreconditionFailed;
+                        result.StatusCode = HttpStatusCode.PreconditionFailed;
                     }
                     else
                     {
@@ -54,8 +47,8 @@ namespace FileStorage.Controllers
                             {
                                 if (fileStream != null)
                                 {
-                                    result.StatusCode = System.Net.HttpStatusCode.Created;
-                                    result.Headers.Add("Server", System.Environment.MachineName);
+                                    result.StatusCode = HttpStatusCode.Created;
+                                    result.Headers.Add("Server", Environment.MachineName);
                                     fileStream.SetLength(length);
                                 }
                             }
@@ -64,12 +57,52 @@ namespace FileStorage.Controllers
                 }
                 catch (Exception ex)
                 {
-                    result = Request.CreateErrorResponse(System.Net.HttpStatusCode.InternalServerError, ex);
+                    result = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, ex);
                 }
             }
 
             return result;
         }
+
+        [HttpPut]
+        [Route("api/File/{*folderPath}")]
+        public HttpResponseMessage CreateFolder(string folderPath, string restype)
+        {
+            HttpResponseMessage result = new HttpResponseMessage();
+            result.StatusCode = HttpStatusCode.BadRequest;
+
+
+            if (restype == "directory")
+            {
+                if (new DirectoryInfo("files").Exists == false)
+                {
+                    Directory.CreateDirectory("files");
+                }
+            }
+
+            string parentFolderPath = Path.GetDirectoryName(folderPath);
+
+            if (Directory.Exists(Path.Combine("files", parentFolderPath)) == false)
+            {
+                result.StatusCode = HttpStatusCode.PreconditionFailed;
+            }
+            else
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.Combine("files", folderPath));
+                    result.StatusCode = HttpStatusCode.Created;
+                    result.Headers.Add("Server", Environment.MachineName);
+                }
+                catch (Exception ex)
+                {
+                    result = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, ex);
+                }
+            }
+
+            return result;
+        }
+
 
         [HttpPut]
         [Route("api/File/{*filepath}")]
@@ -158,28 +191,18 @@ namespace FileStorage.Controllers
             return result;
         }
 
-        private async Task WriteBytes(string filePath, long startPosition, Stream content)
-        {
-            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read))
-            {
-                content.Seek(0, SeekOrigin.Begin);
-                fs.Seek(startPosition, SeekOrigin.Begin);
-                await content.CopyToAsync(fs);
-            }
-        }
-
         [HttpGet]
         [Route("api/File/{*filepath}")]
         public HttpResponseMessage GetFile(string filepath)
         {
             HttpResponseMessage result = new HttpResponseMessage();
-            result.StatusCode = HttpStatusCode.InternalServerError;
+            result.StatusCode = HttpStatusCode.OK;
 
             try
             {
                 if (new DirectoryInfo("files").Exists == false)
                 {
-                    return result;
+                    Directory.CreateDirectory("files");
                 }
 
                 string folderPath = Path.GetDirectoryName(filepath);
@@ -238,8 +261,6 @@ namespace FileStorage.Controllers
                         {
                             result.Content.Headers.ContentRange = new ContentRangeHeaderValue(startPosition, endPosition);
                         }
-
-                        result.StatusCode = HttpStatusCode.OK;
                     }
                 }
             }
@@ -249,6 +270,16 @@ namespace FileStorage.Controllers
             }
 
             return result;
+        }
+
+        private static async Task WriteBytes(string filePath, long startPosition, Stream content)
+        {
+            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.Read))
+            {
+                content.Seek(0, SeekOrigin.Begin);
+                fs.Seek(startPosition, SeekOrigin.Begin);
+                await content.CopyToAsync(fs);
+            }
         }
     }
 
