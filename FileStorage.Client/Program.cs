@@ -66,7 +66,7 @@ namespace FileStorage.Client
         /// <param name="filename">The name of the file to generate</param>
         /// <param name="sizeInMb">The size in mb</param>
         /// <returns>The md5 hash of the generated file</returns>
-        static string GenerateTestData(string filename, int sizeInMb = 400)
+        static string GenerateTestData(string filename, int sizeInMb = 4)
         {
             string computedMd5 = String.Empty;
 
