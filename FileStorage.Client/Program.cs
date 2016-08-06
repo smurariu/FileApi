@@ -9,135 +9,92 @@ namespace FileStorage.Client
     {
         static void Main(string[] args)
         {
-            int kb = 1024;
-            int chunkSize = 1024 * kb;
-
-            string filename = @"testPayload.txt";
-
-            if (args.Length == 1)
-            {
-                filename = args[0];
-            }
-
-            Stopwatch sw = Stopwatch.StartNew();
-
-            FileInfo fi = new FileInfo(filename);
-            using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
-            {
-                //create the file on the server
-                CreateFile(fi.Name, fi.Length);
-
-                //transfer the file contents
-                for (long i = 0; i < fi.Length; i += chunkSize)
-                {
-                    PutRange(fs, fi.Name, i, i + chunkSize);
-                    Console.Write(i);
-                }
-            }
-
-            sw.Stop();
-
-            Console.WriteLine(Environment.NewLine + "Transferred " + fi.Length + " bytes in " + sw.ElapsedMilliseconds);
-
-
-            string filenameRead = @"testPayloadRead.txt";
-            GetFile(filename, filenameRead);
+            TestServer();
 
             Console.ReadLine();
         }
 
 
-        private static void GetFile(string getFile, string saveFile)
+        /// <summary>
+        /// Test the server by generating a random file
+        /// uploading it, downloading it and comparing 
+        /// the results.
+        /// </summary>
+        private static void TestServer()
         {
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + getFile);
-            webRequest.Method = "GET";
+            string randomFileName = Guid.NewGuid().ToString() + ".bin";
 
-            (webRequest as WebRequest).ContentLength = 0;
-            (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=0-256000");
+            string sentMd5 = GenerateTestData(randomFileName);
+            string receivedMd5 = String.Empty;
 
-            using (HttpWebResponse wr = (HttpWebResponse)webRequest.GetResponse())
+            Stopwatch sw = Stopwatch.StartNew();
+
+            StorageClient.CreateFolder("testData");
+            StorageClient.UploadFile(randomFileName, "testData");
+
+            sw.Stop();
+
+            FileInfo fi = new FileInfo(randomFileName);
+            Console.WriteLine(Environment.NewLine + "Transferred " + fi.Length + " bytes in " + sw.ElapsedMilliseconds + " ms.");
+
+            File.Delete(randomFileName);
+
+            StorageClient.GetFile("testData/" + randomFileName, randomFileName);
+
+            using (FileStream receivedFileStream = File.OpenRead(randomFileName))
             {
-                using (Stream response = wr.GetResponseStream())
-                {
-                    // handle response stream.
-                    using (Stream s = File.Create(saveFile))
-                    {
-                        response.CopyTo(s);
-                    }
-                }
-                Console.WriteLine("Read Status Code: " + wr.StatusCode);
-                Console.WriteLine("Read Header: ");
-                foreach (var headKey in wr.Headers.AllKeys)
-                {
-                    Console.Write(" " + headKey + " = " + wr.Headers.Get(headKey) + "; ");
-                }
+                receivedMd5 = ComputeMd5(receivedFileStream);
             }
+
+            //compare MD5s
+            if (String.CompareOrdinal(receivedMd5, sentMd5) == 0)
+            {
+                Console.WriteLine("Test OK!");
+            }
+            else
+            {
+                Console.WriteLine("Test failed!");
+            }
+
+            File.Delete(randomFileName);
         }
 
-
-
-        private static void CreateFile(string name, long length)
+        /// <summary>
+        /// Generates a file with random content and 
+        /// returns the md5 hash of the gnenerated file
+        /// </summary>
+        /// <param name="filename">The name of the file to generate</param>
+        /// <param name="sizeInMb">The size in mb</param>
+        /// <returns>The md5 hash of the generated file</returns>
+        static string GenerateTestData(string filename, int sizeInMb = 400)
         {
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + name);
-            webRequest.Method = "PUT";
+            string computedMd5 = String.Empty;
 
-            (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization, "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
-            (webRequest as WebRequest).Headers.Add("x-ms-content-length", length.ToString());
-            (webRequest as WebRequest).ContentLength = 0;
-
-            using (HttpWebResponse wr = (HttpWebResponse)webRequest.GetResponse())
+            // Note: block size must be a factor of 1MB to avoid rounding errors :)
+            const int blockSize = 1024 * 8;
+            const int blocksPerMb = (1024 * 1024) / blockSize;
+            byte[] data = new byte[blockSize];
+            Random rng = new Random();
+            using (FileStream stream = File.Open(filename, FileMode.OpenOrCreate, FileAccess.ReadWrite))
             {
-                using (Stream response = wr.GetResponseStream())
+                for (int i = 0; i < sizeInMb * blocksPerMb; i++)
                 {
-                    // handle response stream.
-                    string responseText = new StreamReader(response).ReadToEnd();
-                    Console.WriteLine(responseText);
+                    rng.NextBytes(data);
+                    stream.Write(data, 0, data.Length);
                 }
+
+                computedMd5 = ComputeMd5(stream);
             }
+
+            return computedMd5;
         }
 
-        public static void PutRange(FileStream fs, string filePath, long start, long end)
+        static string ComputeMd5(Stream inputStream)
         {
-            //read range calculation
-            if (fs.Length < end)
-            {
-                end = fs.Length;
-            }
-            int range = (int)(end - start);
-
-            byte[] dataToSend = new byte[range];
-
-            int bytesRead = 0;
-            fs.Seek(start, SeekOrigin.Begin);
-            bytesRead = fs.Read(dataToSend, 0, range);
-
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + filePath + "?comp=range");
-            webRequest.Method = "PUT";
-
             System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
-            byte[] md5Hash = md5.ComputeHash(dataToSend);
-
-            (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization, "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
-            (webRequest as WebRequest).Headers.Add("Content-MD5", Convert.ToBase64String(md5Hash));
-            (webRequest as WebRequest).Headers.Add("x-ms-write", "write");
-            (webRequest as WebRequest).Headers.Add("x-ms-range", "bytes=" + start + "-" + (start + bytesRead).ToString());
-            (webRequest as WebRequest).Headers.Add("x-ms-content-length", bytesRead.ToString());
-
-            using (Stream requestStream = webRequest.GetRequestStream())
-            {
-                requestStream.Write(dataToSend, 0, dataToSend.Length);
-            }
-
-            using (HttpWebResponse wr = (HttpWebResponse)webRequest.GetResponse())
-            {
-                using (Stream response = wr.GetResponseStream())
-                {
-                    // handle response stream.
-                    string responseText = new StreamReader(response).ReadToEnd();
-                    Console.WriteLine(responseText);
-                }
-            }
-
+            inputStream.Seek(0, SeekOrigin.Begin);
+            byte[] md5Hash = md5.ComputeHash(inputStream);
+            return Convert.ToBase64String(md5Hash);
         }
     }
 }
