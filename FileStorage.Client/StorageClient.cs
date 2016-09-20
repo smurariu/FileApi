@@ -8,7 +8,7 @@ namespace FileStorage.Client
     {
         static int kb = 1024;
         static int chunkSize = 1024 * kb;
-        static string _apiPath = "http://localhost:8081/Api/File/";
+        static string _apiPath = "http://localhost:8085/Api/File/";
 
         public static void UploadFile(string filename, string folderPath=null)
         {
@@ -35,7 +35,7 @@ namespace FileStorage.Client
 
         internal static void CreateFolder(string folderName)
         {
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + folderName + "?restype=directory");
+            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create(_apiPath + folderName + "?restype=directory");
             webRequest.Method = "PUT";
 
             (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization, "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
@@ -53,7 +53,7 @@ namespace FileStorage.Client
 
         internal static void CreateFile(string name, long length)
         {
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + name);
+            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create(_apiPath + name);
             webRequest.Method = "PUT";
 
             (webRequest as WebRequest).Headers.Add(HttpRequestHeader.Authorization, "Bearer 5c5d3b905c00fdc9817809e324fbe4ab");
@@ -86,7 +86,7 @@ namespace FileStorage.Client
             fs.Seek(start, SeekOrigin.Begin);
             bytesRead = fs.Read(dataToSend, 0, range);
 
-            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create("http://localhost:8081/Api/File/" + filePath + "?comp=range");
+            HttpWebRequest webRequest = (HttpWebRequest)HttpWebRequest.Create(_apiPath + filePath + "?comp=range");
             webRequest.Method = "PUT";
 
             System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
